@@ -1,0 +1,254 @@
+---
+title: "Assignment 2. Zika and Dengue virus comparison."
+author: "Clara Inserte & Samuel Santamaria"
+date: "11/10/2021"
+output: html_document
+---
+<style>
+p.caption {
+  font-size: 0.8em;
+}
+</style>
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(fig.align = "center")
+
+```
+
+```{r files-libraries, include=FALSE}
+library(seqinr)
+library(HMM)
+library(ggplot2)
+library(ggpubr)
+zika=read.fasta("Zika.fasta")
+zika=zika[[1]]
+dengue=read.fasta("Dengue.fasta")
+dengue=dengue[[1]]
+```
+<br>
+
+The goal of this project is to compare the genomes of Dengue and Zika virus, mainly focusing in the presence or absence of the trinucleotide 'cct' and the GC content in sliding windows. 
+
+<br>
+
+```{r exercise 1 prep, echo=F}
+states=c("AT","CG") #GC-rich or AT-rich sequences
+symbols=c("a","c","g","t") #nucleotides 
+transmatrix=matrix(c(0.7,0.3,0.3,0.7),2) #Transition probabilities
+emissionprobs=matrix(c(0.329,0.181,0.301,0.313,0.159,0.307,0.211,0.199),2) #Emission prob
+initial_prob=transmatrix%*%transmatrix%*%transmatrix%*%transmatrix%*%transmatrix%*%transmatrix%*%transmatrix%*%transmatrix%*%transmatrix%*%transmatrix%*%transmatrix%*%transmatrix%*%transmatrix%*%transmatrix%*%transmatrix%*%transmatrix%*%transmatrix%*%transmatrix%*%transmatrix%*%transmatrix%*%transmatrix%*%transmatrix%*%transmatrix%*%transmatrix%*%transmatrix%*%transmatrix
+
+hmm1=initHMM(states,symbols,c(0.5,0.5),transmatrix,emissionprobs) #hidden Markov model
+
+```
+**CHANGE POINTS**
+
+We used a Hidden-Markov-Model to analyze which virus has more change points from an AT-rich sequence stretch to a GC-rich one or viceversa. To estimate the most likely hidden states (AT-rich or GC-rich) of an HMM based on the sequence of observed symbols (a, c, g, t), Viterbi's algorithm was used. 
+
+The states predicted were transformed into a binary code of 1 and 0 and plotted to observe the changes. The number of total changes was also computed. 
+
+We can observe more changes of state were estimated in the Zika virus genome *(figure 1)* than on the Dengue virus genome *(figure 2)*. This could mean the Dengue virus genome has as average longer sequence stretches with the same state (AT-rich or GC-rich).
+
+<br>
+```{r zika changes, echo=F, fig.cap="*Figure 1*. Change plot for Zika virus. 1 means CG-rich strech and 0 means AT-rich strech were predicted"}
+path_z=viterbi(hmm1,c(zika)) #viterbi algorithm
+z_z=ifelse(path_z=="CG",1,0) #0-1 vector for AT-rich state or GC+rich state
+ts.plot(z_z, col='#10BFC4', main='Change plot for Zika virus') #plot
+
+#count the changes for zika
+cchang_z=0
+for (i in c(1:(length(path_z)-1))) {
+  if(path_z[i]!=path_z[i+1]){
+     cchang_z = cchang_z+1
+  }
+}
+
+print('Total changes:');cchang_z
+```
+
+```{r dengue changes, echo=F, fig.cap="*Figure 2*. Change plot for Dengue virus. 1 means CG-rich strech and 0 means AT-rich strech were predicted"}
+path_d=viterbi(hmm1,c(dengue)) #viterbi algorithm
+z_d=ifelse(path_d=="CG",1,0) #0-1 vector for AT-rich state or GC+rich state
+ts.plot(z_d, col='#F7766D', main='Change plot for Dengue virus') #plot
+
+#count the changes for dengue
+cchang_d = 0
+for (i in c(1:(length(path_d)-1))) {
+  if(path_d[i]!=path_d[i+1]){
+     cchang_d = cchang_d+1
+  }
+}
+
+print('Total changes:');cchang_d
+```
+
+**State frequencies**
+
+We also computed the frequency of each state by specie to compare. As we can observe, Dengue virus has a more AT-rich sequence stretches while Zika has more GC-rich sequence stretches *(figure 3)*. 
+
+```{r, echo=F, fig.cap="*Figure 3*. Barplot of the frequency of each state by specie. Zika in blue, Dengue in red AT: AT-rich, GC: GC-rich" }
+#Vectors for the dataframe
+states_specie <- as.factor(c(rep("Zika",4349),rep("Zika",6445),rep("Dengue",6215),rep("Dengue",4520)))
+states_st <- c(rep("AT",4349), rep("GC",6445), rep("AT",6215), rep("GC",4520))  
+df_states <- data.frame( states_specie, states_st) #Dataframe with states and species
+
+#plot
+ggplot(df_states, aes(x = states_st, fill=states_specie)) + 
+    geom_bar(position = 'dodge') + 
+   theme_light() + 
+   labs(title = "Frequence of each state", x = "States", fill = "Specie")
+```
+
+<br>
+
+**GC CONTENT AND PRESENCE OF 'CCT'**
+
+We calculated the GC content along sliding windows of 100bp, at the same time we studied the presence of 'cct' in the same sliding windows. 
+
+<br>
+```{r ex2, echo=FALSE}
+
+##ZIKA virus
+n_z = length(zika)
+m = 100 #window size
+k_z = n_z%/%100 #How many chunks 
+gccC_z = numeric(k_z)
+ccct_z = numeric(k_z)
+for(i in 1:k_z){
+  a = (i-1)*m+1
+  b = a+m-1
+  gccC_z[i] = GC(zika[a:b])
+  ccct_z[i] = count(zika[a:b],3)['cct']
+}
+pcct_z <- ifelse(ccct_z>0, 1, 0) #0-1 vector for absence-presence of cct
+
+
+##ZIKA virus
+n_d = length(dengue)
+m = 100 #window size
+k_d = n_d%/%100 #How many chunks 
+gccC_d = numeric(k_d)
+ccct_d = numeric(k_d)
+for(i in 1:k_d){
+  a = (i-1)*m+1
+  b = a+m-1
+  gccC_d[i] = GC(dengue[a:b])
+  ccct_d[i] = count(dengue[a:b],3)['cct']
+}
+pcct_d <- ifelse(ccct_d>0, 1, 0) #0-1 vector for absence-presence of cct
+```
+**GC content**
+
+We plotted the GC content along the sliding windows. We can observe that, overall, the Zika virus has higher GC content than the Dengue virus *(figure 4)*. The GC content directly affects the efficiency of viral gene expression in human cells, more GC content may imply more expression in human cells, therefore the Zika virus could have higher expression in human cells than Dengue.  
+
+<br>
+```{r gc content plot, echo=F, fig.cap="*Figure 4*. GC content plot. Sliding windows of 100bp. Dengue GC content in red, Zika GC content in blue."}
+#Dataframe setup for plot
+sliding <- c(gccC_z, gccC_d)
+sb <- c((1:length(gccC_d)),(1:(length(gccC_d))))
+names <- c(rep("Zika", length(gccC_z)), rep("Dengue", length(gccC_d)))
+df <- data.frame(sb, sliding, names)
+
+#plot
+ggplot(data = df, 
+       aes(x = sb, y = sliding, color = names)) +
+  geom_line() + scale_color_manual(values = c("#F7766D",'#10BFC4'), name = "") +
+  labs(title = "GC Content",
+       subtitle = "Window size: 100 bp", 
+       x = "Window", y = "GC %") +
+  theme_light() + theme(legend.position = "bottom")
+```
+<br>
+
+**Presence of 'cct'**
+
+We studied the presence and absence of the trinucleotide 'cct' and plotted it. As we can observe, both viruses have approximately the same distribution of presence/absence of 'cct' *(figure 5)*.
+```{r cct presence plot, echo=F, fig.cap="*Figure 5*. Plot for the presence (1) or absence (0) of 'cct' along the sliding windows. Dengue in red, Zika in blue."}
+#Dataframes for presence of cct
+zika_cct <- data.frame(y=pcct_z, x=c(1:length(ccct_z)))
+dengue_cct <- data.frame(y=pcct_d, x=c(1:length(ccct_d)))
+
+#plots
+dengue_cct_plot <- ggplot(dengue_cct, aes(x,y)) + geom_point(shape = 1, col = "#F7766D") + theme_light() + labs(y='Presence of "cct"', x = "Sliding window", title = 'Dengue virus')
+zika_cct_plot <- ggplot(zika_cct, aes(x,y)) + geom_point(shape = 1, col = '#10BFC4') + theme_light() + labs(y='Presence of "cct"', x = "Sliding window", title = 'Zika virus')
+ggarrange(dengue_cct_plot,zika_cct_plot,
+          ncol = 1, nrow = 2)
+```
+
+
+
+<br>
+
+**LOGISTIC MODEL**
+
+After obtaining GC content and the presence/absence of “cct” we tested if there was any significant relationship between them. To study such a relationship, we applied a logistic model for both viruses and compared the difference among them. Below we see the summary of the logistic model for Zika virus. 
+
+```{r logit zika, echo=F}
+#Zika
+logit_z <- glm(pcct_z~gccC_z, family = binomial)
+summary(logit_z)
+```
+And the logistic model summary for Dengue virus. 
+```{r logit dengue, echo=F}
+#Dengue
+logit_d <- glm(pcct_d~gccC_d, family = binomial)
+summary(logit_d)
+
+#dataframes to plot
+df_z <- data.frame(gccC_z, logit_z$fitted.values)
+df_d <- data.frame(gccC_d, logit_d$fitted.values)
+```
+There is a significant relationship between the presence of “cct” and the GC content for both Zika (p-value=0.0368) and Dengue(p-value=0.00465). This relationship is directly proportional and, even though it is really similar for the two of them, in Dengue it is more significant.
+
+<br>
+
+We plotted the probability of "cct" presence depending on the GC content to observe the differences between the two logistic models previously computed *(figure 6)*. The probability of "cct" presence curve for Dengue is higher than for Zika meaning that, for the same GC content value, the probability of "cct" presence is higher for Dengue than for Zika.
+```{r prob, echo=F, fig.cap="*Figure 6*. Plot of the probability of 'cct' presence depending on the GC content. Zika virus in blue, Dengue virus in red"}
+#Plot the probability of the presence of 'cct' vs. gc content
+ggplot(df_z, aes(gccC_z, logit_z$fitted.values)) + geom_point(shape = 1, col='#10BFC4') + 
+  theme(panel.background = element_rect(fill='white'), panel.grid.major = element_line(colour = 'lightgrey', size = 0.3)) +
+  labs(title = "Probability of 'cct' presence by GC content", y = "Probability of 'cct' presence", x = 'GC content') + 
+    geom_point(data=df_d, aes(gccC_d, logit_d$fitted.values),shape = 1, col='#F7766D') 
+
+```
+<br>
+
+**LOGISTIC REGRESSION FIT**
+
+Lastly, to know which was the probability of the presence of “cct” in a genome region with GC content of 0.5 for each virus we used the logistic regression fit, employing the data obtained from the logistic model in the previous test. 
+
+The probability of "cct" presence in a chunk with GC content of 0.5 for the Zika virus is:
+```{r prob 0.5 zika,echo=F}
+gc_content <- 0.50
+
+#Zika
+top_z <- exp(-4.682+11.563*gc_content)
+prob_z <- top_z/(1+top_z)
+prob_z
+```
+The probability of "cct" presence in a chunk with GC content of 0.5 for the Dengue virus is:
+```{r prob 0.5 dengue, echo=F}
+#Dengue
+top_d <- exp(-6.076+15.487*gc_content)
+prob_d <- top_d/(1+top_d)
+prob_d
+
+```
+
+<br>
+
+We plotted the probability of 'cct' presence vs. the GC content marking by dashed lines the probability of 'cct' presence when GC content is 0.50. 
+```{r plot 0.50 prob, echo=F, fig.cap="*Figure 7*. Plot of the probability of 'cct' presence depending on the GC content. Zika virus in blue, Dengue virus in red. Horizontal dashed lines show the probability of 'cct' presence when GC content is 0.50."}
+#Plot the probability of the presence of 'cct' vs. gc content
+ggplot(df_z, aes(gccC_z, logit_z$fitted.values)) + geom_point(shape = 1, col="#10BFC4") + 
+  theme(panel.background = element_rect(fill='white'), panel.grid.major = element_line(colour = 'lightgrey', size = 0.3)) +
+  labs(title = "Probability of 'cct' presence by GC content", y = "Probability of 'cct' presence", x = 'GC content') + 
+  geom_segment(aes(x = 0.5, y = -Inf, xend = 0.5, yend = 0.7501664), linetype = "dashed", col = "#f1b200") +
+  geom_segment(aes(x = -Inf, y = 0.7501664, xend = 0.5, yend = 0.7501664), linetype = "dashed", col = '#f1b200') +
+    geom_point(data=df_d, aes(gccC_d, logit_d$fitted.values),shape = 1, col="#F7766D") + 
+  theme(panel.background = element_rect(fill='white'), panel.grid.major = element_line(colour = 'lightgrey', size = 0.3)) + 
+  geom_segment(aes(x = 0.5, y = -Inf, xend = 0.5, yend = 0.8412422), linetype = "dashed", col = "#f1b200") +
+  geom_segment(aes(x = -Inf, y = 0.8412422, xend = 0.5, yend = 0.8412422), linetype = "dashed", col = "#f1b200")
+
+```
